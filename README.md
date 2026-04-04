@@ -25,8 +25,17 @@ Or download a binary from [Releases](https://github.com/devforgeinc/anvil/releas
 ## Quick Start
 
 ```bash
-# Start the server
+# Start the server (daemonizes by default)
 anvil start
+
+# Or run in foreground
+anvil start --foreground
+
+# Check status
+anvil status
+
+# Stop the server
+anvil stop
 
 # Open the browser UI
 open http://localhost:5175
@@ -34,7 +43,7 @@ open http://localhost:5175
 # Default login: admin / anvil
 ```
 
-The server runs on port **7474** (HTTP API) and **7687** (Bolt protocol). The browser UI runs on port **5175**.
+The server runs on port **7474** (HTTP API) and **7687** (Bolt protocol). The browser UI runs on port **5175**. The server forks to background by default and writes its PID to `data/anvil.pid`.
 
 ## Features
 
@@ -56,6 +65,8 @@ MATCH (n:Person {name: "Alice"}) RETURN n.name, n.age
 ### Native Document Store (NoSQL)
 
 Built-in document collections with O(1) key lookups, composite keys, TTL, secondary indexes, batch operations, and filter expressions — no separate database needed.
+
+Collections are organized into schemas: `public` (default, no prefix needed) for application data, and `auth` for system collections. The browser UI provides a schema dropdown to switch between views.
 
 ```bash
 # Create a collection
@@ -119,13 +130,15 @@ Auto-generated GraphQL schema from your graph structure with introspection and q
 
 ### Authentication (JWT + JWKS)
 
-Graph-native authentication with users and roles stored as graph nodes and document collections.
+Graph-native authentication with users and roles stored in schema-namespaced collections (`auth.*`) and synced to graph nodes.
 
-- **RS256 JWT tokens** — asymmetric signing, 1-hour access tokens, 7-day refresh tokens
+- **RS256 JWT tokens** — asymmetric signing with persistent RSA key pair (`data/jwt_key.pem`), 1-hour access tokens, 7-day refresh tokens
 - **JWKS endpoint** — `GET /.well-known/jwks.json` for external token verification
 - **Argon2id password hashing** — OWASP-recommended
 - **Per-request session middleware** — identity extracted from Bearer token on every request
-- **Users as graph nodes** — `:User` and `:Role` nodes with `[:HAS_ROLE]` relationships
+- **Schema-namespaced collections** — `auth.users`, `auth.roles`, `auth.user_roles`, `auth.refresh_tokens`
+- **Graph sync** — `:User` and `:Role` nodes with `[:HAS_ROLE]` relationships, synced from auth collections
+- **Forced password change** — default admin user must change password on first login
 
 ```bash
 # Login
@@ -138,11 +151,20 @@ curl -X POST http://localhost:7474/auth/login \
 curl http://localhost:7474/db/query \
   -H "Authorization: Bearer eyJ..." \
   -d '{"query": "MATCH (n) RETURN n"}'
+
+# Register a new user
+curl -X POST http://localhost:7474/auth/register \
+  -H "Authorization: Bearer eyJ..." \
+  -d '{"username": "alice", "password": "secret", "email": "alice@example.com"}'
+
+# Refresh an expired access token
+curl -X POST http://localhost:7474/auth/refresh \
+  -d '{"refresh_token": "abc..."}'
 ```
 
 ### Row-Level Security (RLS)
 
-PostgreSQL-inspired fine-grained access control at the data level.
+PostgreSQL-inspired fine-grained access control at the data level. Policies on graph labels automatically protect paired document collections via sync pairs.
 
 ```cypher
 -- Enable RLS on a label
@@ -160,19 +182,22 @@ CREATE POLICY tenant ON :Project FOR ALL TO authenticated
 SIMULATE POLICY AS alice WITH ROLE reader ON :Project
 ```
 
+RLS sync pairs: when a sync rule links a label to a collection (e.g. `SYNC LABEL Person TO COLLECTION persons`), a single policy on `:Person` automatically applies to the `persons` collection too.
+
 ### Browser UI
 
 React Router 7 web application with:
 
+- **Login Screen** — JWT authentication with forced password change on first login
 - **Cypher Editor** — syntax highlighting, Cmd+Enter execution, table/JSON/graph result views
 - **GraphQL Playground** — query editor with introspection, data/JSON views
-- **Graph Visualization** — force-directed layout, node/edge inspection and editing, double-click to expand neighbors, per-label caption properties
+- **Graph Visualization** — force-directed layout, node/edge inspection and editing, double-click to expand neighbors, per-label caption properties, right-click context menus
 - **Document Store Manager** — collection CRUD, document browsing with pagination, JSON editor, sync rule management
 - **RLS Policy Manager** — create/drop policies, enable/disable RLS, policy simulator
 - **Schema Browser** — labels, relationship types, property keys, indexes, constraints
+- **Schema Dropdown** — switch between `public` and `auth` schemas (like Supabase)
 - **Monitoring Dashboard** — real-time stats from server
 - **Admin Panel** — user management, role management, database info
-- **Login Screen** — JWT authentication with forced password change on first login
 
 ### Additional Features
 
@@ -200,8 +225,9 @@ document_storage = "unified"   # or "split"
 [auth]
 enabled = true
 default_password = "anvil"
-access_token_ttl_secs = 3600
-refresh_token_ttl_secs = 604800
+access_token_ttl_secs = 3600   # 1 hour
+refresh_token_ttl_secs = 604800 # 7 days
+# RSA key pair auto-generated and persisted to data/jwt_key.pem
 ```
 
 Or use environment variables:
@@ -225,11 +251,11 @@ ANVIL_HTTP_PORT=8080 ANVIL_DATA_DIR=/var/data anvil start
 ### Authentication
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/auth/login` | Login, returns JWT tokens |
+| POST | `/auth/login` | Login, returns RS256 JWT tokens |
 | POST | `/auth/refresh` | Refresh access token |
-| POST | `/auth/register` | Register new user |
+| POST | `/auth/register` | Register new user (requires auth) |
 | POST | `/auth/change-password` | Change password |
-| GET | `/.well-known/jwks.json` | JWKS public keys |
+| GET | `/.well-known/jwks.json` | JWKS public keys for token verification |
 
 ### Document Store
 | Method | Endpoint | Description |
