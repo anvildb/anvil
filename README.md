@@ -1,4 +1,4 @@
-# Anvil Graph Database
+# Anvil DB
 
 **A Neo4j-inspired graph database written in Rust** — combining a property graph, native document store (NoSQL), and row-level security into a single binary.
 
@@ -6,8 +6,16 @@ Anvil eliminates the need to run separate databases for graph queries and docume
 
 ## Install
 
+### Linux / macOS
+
 ```bash
 curl -fsSL https://anvildb.com/install.sh | sh
+```
+
+### Windows
+
+```powershell
+irm https://anvildb.com/install.ps1 | iex
 ```
 
 Or download a binary from [Releases](https://github.com/devforgeinc/anvil/releases).
@@ -22,10 +30,21 @@ Or download a binary from [Releases](https://github.com/devforgeinc/anvil/releas
 | macOS | aarch64 (Apple Silicon) | `anvil-vX.Y.Z-aarch64-apple-darwin.tar.gz` |
 | Windows | x86_64 | `anvil-vX.Y.Z-x86_64-pc-windows-msvc.zip` |
 
+### Install Paths
+
+| | Linux / macOS | Windows |
+|---|---|---|
+| Binary | `/usr/local/bin/anvil` | `%LOCALAPPDATA%\Anvil\anvil.exe` |
+| Config | `/etc/anvil/anvil.toml` | `%LOCALAPPDATA%\Anvil\anvil.toml` |
+| Data | `/var/lib/anvil/` | `%LOCALAPPDATA%\Anvil\data\` |
+| Logs | `/var/log/anvil/anvil.log` | `%LOCALAPPDATA%\Anvil\log\anvil.log` |
+
+For local development builds (`cargo run`), paths default to `./data`, `./anvil.toml`, and stdout logging.
+
 ## Quick Start
 
 ```bash
-# Start the server (daemonizes by default)
+# Start the server (daemonizes, logs to data/anvil.log)
 anvil start
 
 # Or run in foreground
@@ -37,36 +56,83 @@ anvil status
 # Stop the server
 anvil stop
 
+# Import sample data
+anvil import cypher ./movies.cypher
+
 # Open the browser UI
 open http://localhost:5175
 
 # Default login: admin / anvil
 ```
 
-The server runs on port **7474** (HTTP API) and **7687** (Bolt protocol). The browser UI runs on port **5175**. The server forks to background by default and writes its PID to `data/anvil.pid`.
+The server runs on port **7474** (HTTP API) and **7687** (Bolt protocol). The browser UI runs on port **5175**.
 
 ## Features
 
-### Property Graph (like Neo4j)
+### Cypher Query Language
 
-Full Cypher query language with nodes, relationships, labels, and properties.
+Full Cypher implementation with multi-hop pattern matching, quantified paths, aggregation, and path finding.
 
 ```cypher
 -- Create nodes and relationships
 CREATE (a:Person {name: "Alice", age: 30})-[:KNOWS]->(b:Person {name: "Bob", age: 25})
 
--- Query with pattern matching
-MATCH (n:Person)-[r:KNOWS]->(m:Person) WHERE n.age > 25 RETURN n, r, m
+-- Pattern matching with WHERE, ORDER BY, LIMIT
+MATCH (n:Person)-[r:KNOWS]->(m:Person)
+WHERE n.age > 25
+RETURN n.name, m.name
+ORDER BY n.name
+LIMIT 10
 
--- Filter by properties
-MATCH (n:Person {name: "Alice"}) RETURN n.name, n.age
+-- Multi-hop traversals with quantified paths
+MATCH (a:Person {name: 'Alice'})-[:KNOWS*1..5]->(f)
+RETURN DISTINCT f.name, min(length(p)) AS depth
+
+-- ALL SHORTEST paths
+MATCH p = ALL SHORTEST (a:Person {name: 'Alice'})--+(b:Person {name: 'Bob'})
+RETURN length(p) AS depth
+
+-- Comma-separated patterns (join on shared variables)
+MATCH (a:Person)-[:ACTED_IN]->(m:Movie), (b:Person)-[:DIRECTED]->(m)
+RETURN a.name AS actor, b.name AS director, m.title
+
+-- Negated relationship types
+MATCH (a:Person)-[:!ACTED_IN]->(m:Movie)
+RETURN a.name, m.title
+
+-- MERGE with ON CREATE SET
+MERGE (m:Movie {title: 'The Matrix'})
+ON CREATE SET m.released = 1999, m.tagline = 'Welcome to the Real World'
+
+-- Aggregation
+MATCH (p:Person)-[:ACTED_IN]->(m:Movie)
+RETURN p.name, collect(m.title) AS movies, count(m) AS movieCount
+ORDER BY movieCount DESC
 ```
+
+### Data Import
+
+Import Neo4j-compatible Cypher scripts via CLI, REST API, or browser UI.
+
+```bash
+# CLI import
+anvil import cypher ./movies.cypher
+
+# REST API import
+curl -X POST http://localhost:7474/db/import/cypher \
+  -H "Content-Type: text/plain" \
+  -H "Authorization: Bearer $TOKEN" \
+  --data-binary @movies.cypher
+# Response: {"total":2, "success":2, "nodesCreated":171, "relationshipsCreated":253, "errors":[]}
+```
+
+Supports multi-statement scripts (semicolon-separated), multi-CREATE without semicolons (Neo4j `initialDatabase.cypher` format), MERGE with ON CREATE SET, and variable binding across CREATE clauses.
 
 ### Native Document Store (NoSQL)
 
 Built-in document collections with O(1) key lookups, composite keys, TTL, secondary indexes, batch operations, and filter expressions — no separate database needed.
 
-Collections are organized into schemas: `public` (default, no prefix needed) for application data, and `auth` for system collections. The browser UI provides a schema dropdown to switch between views.
+Collections are organized into schemas: `public` (default) for application data, and `auth` for system collections.
 
 ```bash
 # Create a collection
@@ -94,7 +160,7 @@ MATCH DOCUMENT d IN orders WHERE d.status = "pending" RETURN d.item, d.qty
 
 ### Graph-Document Sync
 
-Automatically keep graph nodes and document collections in sync. Define a sync rule and existing data is backfilled immediately.
+Automatically keep graph nodes and document collections in sync.
 
 ```cypher
 SYNC LABEL Person TO COLLECTION persons KEY name INCLUDE name, email, age
@@ -104,7 +170,7 @@ Now:
 - Creating a `:Person` node auto-creates a document in `persons`
 - Inserting a document in `persons` auto-creates a `:Person` node
 - Updates propagate bidirectionally
-- The `INCLUDE` clause controls which fields sync (keeps documents lean)
+- The `INCLUDE` clause controls which fields sync
 
 ### GraphQL API
 
@@ -120,42 +186,27 @@ Auto-generated GraphQL schema from your graph structure with introspection and q
 }
 ```
 
-```graphql
-{
-  __schema {
-    types { name kind }
-  }
-}
-```
-
 ### Authentication (JWT + JWKS)
 
 Graph-native authentication with users and roles stored in schema-namespaced collections (`auth.*`) and synced to graph nodes.
 
-- **RS256 JWT tokens** — asymmetric signing with persistent RSA key pair (`data/jwt_key.pem`), 1-hour access tokens, 7-day refresh tokens
+- **RS256 JWT tokens** — asymmetric signing with persistent RSA key pair, 1-hour access tokens, 7-day refresh tokens
 - **JWKS endpoint** — `GET /.well-known/jwks.json` for external token verification
 - **Argon2id password hashing** — OWASP-recommended
 - **Per-request session middleware** — identity extracted from Bearer token on every request
-- **Schema-namespaced collections** — `auth.users`, `auth.roles`, `auth.user_roles`, `auth.refresh_tokens`
-- **Graph sync** — `:User` and `:Role` nodes with `[:HAS_ROLE]` relationships, synced from auth collections
+- **Graph sync** — `:User` and `:Role` nodes with `[:HAS_ROLE]` relationships
 - **Forced password change** — default admin user must change password on first login
 
 ```bash
 # Login
 curl -X POST http://localhost:7474/auth/login \
   -d '{"username": "admin", "password": "anvil"}'
-
 # Response: { "idToken": "eyJ...", "refreshToken": "abc...", "accessToken": "eyJ..." }
 
 # Use the token
 curl http://localhost:7474/db/query \
   -H "Authorization: Bearer eyJ..." \
   -d '{"query": "MATCH (n) RETURN n"}'
-
-# Register a new user
-curl -X POST http://localhost:7474/auth/register \
-  -H "Authorization: Bearer eyJ..." \
-  -d '{"username": "alice", "password": "secret", "email": "alice@example.com"}'
 
 # Refresh an expired access token
 curl -X POST http://localhost:7474/auth/refresh \
@@ -164,7 +215,7 @@ curl -X POST http://localhost:7474/auth/refresh \
 
 ### Row-Level Security (RLS)
 
-PostgreSQL-inspired fine-grained access control at the data level. Policies on graph labels automatically protect paired document collections via sync pairs.
+PostgreSQL-inspired fine-grained access control at the data level.
 
 ```cypher
 -- Enable RLS on a label
@@ -177,12 +228,32 @@ CREATE POLICY own_data ON :Project FOR SELECT TO reader
 -- Multi-tenant isolation
 CREATE POLICY tenant ON :Project FOR ALL TO authenticated
   USING (n.tenant_id = session('tenant_id'))
-
--- Simulate what a user would see
-SIMULATE POLICY AS alice WITH ROLE reader ON :Project
 ```
 
-RLS sync pairs: when a sync rule links a label to a collection (e.g. `SYNC LABEL Person TO COLLECTION persons`), a single policy on `:Person` automatically applies to the `persons` collection too.
+### Stored Functions & Triggers
+
+```cypher
+-- Create a stored function
+CREATE FUNCTION greet(name STRING) RETURNS STRING
+  RETURN 'Hello, ' + name + '!'
+
+-- Create a trigger
+CREATE TRIGGER audit_insert AFTER INSERT ON :Person
+  SET NEW.created_at = timestamp()
+```
+
+### Edge Functions
+
+JavaScript/TypeScript functions executed via HTTP endpoints with Deno or Node.js runtime.
+
+```cypher
+CREATE EDGE FUNCTION hello RUNTIME 'deno' ENTRYPOINT 'functions/hello.ts'
+```
+
+```bash
+curl http://localhost:7474/edge/hello?name=Alice
+# {"message": "Hello, Alice!"}
+```
 
 ### Browser UI
 
@@ -190,14 +261,16 @@ React Router 7 web application with:
 
 - **Login Screen** — JWT authentication with forced password change on first login
 - **Cypher Editor** — syntax highlighting, Cmd+Enter execution, table/JSON/graph result views
-- **GraphQL Playground** — query editor with introspection, data/JSON views
-- **Graph Visualization** — force-directed layout, node/edge inspection and editing, double-click to expand neighbors, per-label caption properties, right-click context menus
-- **Document Store Manager** — collection CRUD, document browsing with pagination, JSON editor, sync rule management
+- **GraphQL Playground** — query editor with introspection
+- **Graph Visualization** — force-directed layout (+ hierarchical, circular, grid), zoom/pan, lasso select, minimap, PNG/SVG export, **focus mode** (click a node to orbit its direct connections in an evenly-spaced circle with highlighted edges/labels, non-neighbors pushed to periphery)
+- **Data Import** — paste or upload Cypher scripts, displays nodes/relationships created
+- **Document Store Manager** — collection CRUD, document browsing, JSON editor, sync rules
 - **RLS Policy Manager** — create/drop policies, enable/disable RLS, policy simulator
+- **Stored Functions & Triggers** — create, list, and manage
 - **Schema Browser** — labels, relationship types, property keys, indexes, constraints
-- **Schema Dropdown** — switch between `public` and `auth` schemas (like Supabase)
-- **Monitoring Dashboard** — real-time stats from server
-- **Admin Panel** — user management, role management, database info
+- **Schema Dropdown** — switch between `public` and `auth` schemas
+- **Monitoring Dashboard** — real-time stats
+- **Admin Panel** — user management, role management
 
 ### Additional Features
 
@@ -208,8 +281,11 @@ React Router 7 web application with:
 - **Plugin System** — native Rust + Lua/Python/WASM/JS/Starlark scripting runtimes
 - **Built-in `apoc` Library** — 55 functions: bitwise, geospatial, collections, text similarity, conversions, math, date/time, graph refactoring, import/export
 - **Client Drivers** — Rust, TypeScript, Python, Go with `anvil://` URI scheme
+- **Observability** — event log, query analytics, configurable alerts
 
 ## Configuration
+
+Config file is searched in order: `./anvil.toml` (local), `/etc/anvil/anvil.toml` (system), `%LOCALAPPDATA%\Anvil\anvil.toml` (Windows). Precedence: CLI flags > env vars > config file > defaults.
 
 ```toml
 # anvil.toml
@@ -219,21 +295,25 @@ bolt_port = 7687
 bind_address = "0.0.0.0"
 
 [storage]
-data_dir = "./data"
-document_storage = "unified"   # or "split"
+data_dir = "/var/lib/anvil"       # or "./data" for development
+document_storage = "unified"       # or "split"
+
+[logging]
+level = "info"
+log_file = "/var/log/anvil/anvil.log"  # empty = stdout
 
 [auth]
 enabled = true
 default_password = "anvil"
-access_token_ttl_secs = 3600   # 1 hour
-refresh_token_ttl_secs = 604800 # 7 days
-# RSA key pair auto-generated and persisted to data/jwt_key.pem
+access_token_ttl_secs = 3600      # 1 hour
+refresh_token_ttl_secs = 604800   # 7 days
+# RSA key pair auto-generated and persisted to data_dir/jwt_key.pem
 ```
 
 Or use environment variables:
 
 ```bash
-ANVIL_HTTP_PORT=8080 ANVIL_DATA_DIR=/var/data anvil start
+ANVIL_HTTP_PORT=8080 ANVIL_DATA_DIR=/var/lib/anvil anvil start
 ```
 
 ## API Endpoints
@@ -244,6 +324,7 @@ ANVIL_HTTP_PORT=8080 ANVIL_DATA_DIR=/var/data anvil start
 | GET | `/` | Server info |
 | GET | `/health` | Health check |
 | POST | `/db/query` | Execute Cypher query |
+| POST | `/db/import/cypher` | Import Cypher script (returns nodes/rels created) |
 | GET | `/db/{name}/schema` | Get database schema |
 | GET | `/db/{name}/graph` | Get full graph data |
 | POST | `/graphql` | GraphQL endpoint |
@@ -270,6 +351,11 @@ ANVIL_HTTP_PORT=8080 ANVIL_DATA_DIR=/var/data anvil start
 | POST | `/docs/{collection}/batch` | Batch operations |
 | GET | `/docs/{collection}/scan` | Paginated scan |
 
+### Edge Functions
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| ANY | `/edge/{name}` | Invoke edge function |
+
 ### Admin
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -290,6 +376,8 @@ Server (Axum + Tokio)
     +--- Document Store (Collections, Indexes, TTL, Sync)
     +--- Auth (JWT RS256, JWKS, Argon2id, Per-request Sessions)
     +--- RLS Engine (Policies, Predicates, Cascading Visibility)
+    +--- Edge Functions (Deno/Node.js subprocess runtime)
+    +--- Stored Functions & Triggers
     +--- Algorithms (PageRank, Shortest Paths, Community Detection)
     +--- Plugin SDK (Native + Lua/Python/WASM/JS/Starlark)
     |
