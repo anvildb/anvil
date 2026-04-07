@@ -396,6 +396,204 @@ Core (Graph Trait, Nodes, Relationships, Properties, Labels)
 - **Storage**: Custom page-based engine with WAL
 - **Minimum Rust Version**: 1.85+
 
+## Roadmap
+
+**761 of 985 tasks completed (77%)**
+
+### Phase 0: Project Scaffolding — Complete (8/8)
+
+Rust workspace, React Router 7 browser app, CI, tooling.
+
+### Phase 1: Core Graph Data Model — Complete (33/33)
+
+- [x] **Primitive Types** — NodeId, RelationshipId, LabelId, PropertyValue enum
+- [x] **Graph Entities** — Node, Relationship, Path structs with builder patterns
+- [x] **Schema & Constraints** — Label/type registries, unique/existence/key constraints
+- [x] **Graph API** — Full CRUD trait with label operations, traversals, statistics
+
+### Phase 2: Storage Engine — Complete (30/30)
+
+- [x] **Page-Based Store** — Fixed-size pages, LRU cache, dirty tracking, mmap option
+- [x] **Record Stores** — Node, relationship, property, string, array, label stores
+- [x] **ID Allocation** — Sequential with free-list recycling, thread-safe
+- [x] **Write-Ahead Log** — Segmented WAL, fsync on commit, crash recovery, checkpointing
+- [x] **File Layout** — graph.db, properties.db, strings.db, WAL directory, lock file
+
+### Phase 3: Indexing — Complete (19/19)
+
+- [x] **B+ Tree** — On-disk, page-backed, range scans, prefix scans, bulk loading, concurrent access
+- [x] **Index Types** — Single-property, composite, unique, full-text (BM25), spatial (R-tree), index-only scans
+- [x] **Index Management** — CREATE/DROP INDEX, automatic maintenance, statistics
+
+### Phase 4: Transaction Engine — Complete (17/17)
+
+- [x] **Transaction Manager** — Begin/commit/rollback, savepoints, read-only mode
+- [x] **Concurrency Control** — MVCC version chains, 3 isolation levels, deadlock detection via wait-for graph
+- [x] **Recovery** — ARIES-style redo/undo, WAL replay, transaction table reconstruction
+- [x] **Garbage Collection** — Version chain pruning, oldest-active tracking
+
+### Phase 5: Cypher Query Language — Complete (78/78)
+
+- [x] **Lexer** — Hand-written with 40+ token types, string escapes, Unicode, nested comments
+- [x] **Parser** — Recursive descent, full Cypher grammar, MATCH/CREATE/MERGE/DELETE/SET/REMOVE/WITH/UNWIND/FOREACH/CALL/UNION
+- [x] **Semantic Analysis** — Variable scoping, type inference, undefined variable detection
+- [x] **Built-in Functions** — 30+ functions: aggregation, scalar, string, math, list, path
+- [x] **Query Planner** — Cost-based optimizer, statistics-driven, index selection, join ordering
+- [x] **Query Executor** — Volcano model, 25+ operators, hash/merge joins, parallel aggregation
+
+### Phase 6: GraphQL API — Complete (36/36)
+
+- [x] **Schema Generation** — Auto-generated from graph structure, Relay-spec connections
+- [x] **Queries** — Filtering, ordering, pagination, nested traversals
+- [x] **Mutations** — Create/update/delete nodes and relationships
+- [x] **Subscriptions** — Real-time via graphql-transport-ws
+- [x] **Cypher Passthrough** — Execute raw Cypher via GraphQL
+- [x] **Integration** — Introspection, error handling, batch DataLoader
+
+### Phase 7: Server — Complete (39/39)
+
+- [x] **HTTP Server** — Axum/Tokio, CORS, REST + GraphQL + WebSocket endpoints
+- [x] **Authentication** — JWT RS256, JWKS, Argon2id, per-request session middleware
+- [x] **Configuration** — TOML config, env vars, CLI flags, system path detection
+- [x] **Multi-Database** — Database routing, schema isolation
+- [x] **Connection Management** — Pool limits, idle timeout, graceful shutdown
+
+### Phase 8: CLI — Complete (20/20)
+
+- [x] **Server Management** — start/stop/status, daemon mode, PID file, log file
+- [x] **Interactive Shell** — Cypher REPL, history, formatting, parameter binding
+- [x] **Data Operations** — Import Cypher scripts, config init, config display
+
+### Phase 9: Browser UI — Complete (65/65)
+
+- [x] **Query Editor** — Cypher highlighting, Cmd+Enter, table/JSON/graph/plan views, settings-aware defaults
+- [x] **Graph Visualization** — Force-directed (+ hierarchical, circular, grid), focus mode with neighbor orbit, lasso select, minimap, PNG/SVG export
+- [x] **Schema Browser** — Labels, types, property keys, indexes, constraints, schema dropdown
+- [x] **Document Manager** — Collection CRUD, document browsing, sync rules, schema-filtered
+- [x] **Admin Panel** — User/role management, event log, alerts (admin-only)
+- [x] **Monitoring** — Active queries, store sizes, memory, throughput, slow query log
+- [x] **Settings** — Theme, editor preferences, graph defaults, connection profiles
+- [x] **Data Import** — Cypher script paste/upload with node/relationship counts
+- [x] **Security** — Role-based UI (admin-only nav items, schema dropdown), JWT role extraction
+
+### Phase 10: Graph Algorithms — Complete (16/16)
+
+PageRank, Dijkstra/A*, BFS/DFS, Louvain, label propagation, connected components, betweenness/closeness/degree centrality, MST, triangle counting, node similarity.
+
+### Phase 11: Performance & Scalability — Complete (19/19)
+
+- [x] **Query Performance** — Plan caching, result caching, parallel operators
+- [x] **Storage Performance** — Page cache tuning, compression (LZ4/Zstd), tiered storage
+- [x] **Concurrency** — Lock-free readers, partitioned indexes, work stealing
+- [x] **Benchmarking** — Criterion benchmarks, LDBC SNB workload, regression tracking
+
+### Phase 12: Operations & Reliability — Complete (13/13)
+
+- [x] **Backup & Restore** — Online snapshots, incremental backup, point-in-time recovery
+- [x] **Observability** — Prometheus metrics, structured logging, OpenTelemetry tracing
+- [x] **Data Integrity** — CRC32 checksums, consistency checks, repair tools
+
+### Phase 13: Clustering & Replication — Complete (7/7)
+
+Raft consensus, WAL streaming replication, leader-follower architecture, read replicas, hash/label-based sharding, rolling upgrades, gossip protocol.
+
+### Phase 14: Ecosystem — Complete (22/22)
+
+- [x] **Client Drivers** — Rust, TypeScript, Python, Go with `anvil://` URI scheme
+- [x] **Migration Tooling** — Neo4j Cypher dump import, CSV, GraphML, JSON-LD
+- [x] **Documentation** — mdBook site, Cypher reference, API docs, architecture guide, tutorials
+- [x] **Testing** — 2,230+ tests, integration tests, property-based tests, fuzz testing
+
+### Phase 15: Plugin System — Complete (98/98)
+
+- [x] **Plugin Framework** — Native Rust + Lua/Python/WASM/JS/TS/Starlark, sandboxed, hot-reload, namespace isolation
+- [x] **APOC Library** — 55 built-in functions: bitwise, geospatial (Haversine), collections, text similarity (Levenshtein, Jaro-Winkler), conversions, math, date/time, graph refactoring, import/export
+
+### Phase 16: Native Document Store — Complete (57/57)
+
+- [x] **Document Model** — Schema-namespaced collections, composite keys, TTL, secondary indexes (GSI/LSI)
+- [x] **Query API** — Filter expressions, batch operations, paginated scan, REST endpoints
+- [x] **Graph-Document Sync** — Bidirectional sync rules, conflict resolution, INCLUDE clause
+- [x] **Storage Modes** — Unified (single file), split (separate files), shared/separate WAL
+- [x] **Transactions** — Document operations participate in graph transactions
+
+### Phase 17: Row-Level Security — Complete (48/48)
+
+- [x] **Policy DDL** — CREATE/DROP POLICY, ENABLE/DISABLE RLS, FORCE RLS
+- [x] **Policy Predicates** — current_user(), current_roles(), session(), permissive/restrictive modes
+- [x] **Sync Pairs** — Policies on labels automatically protect paired document collections
+- [x] **Schema Protection** — Label reservation by schema, cross-schema mutation blocking
+- [x] **Admin Tools** — Policy simulator, audit logging, policy browser in UI
+
+### Phase 18: Database Functions — Complete (33/33)
+
+- [x] **Function DDL** — CREATE/DROP/SHOW FUNCTION, typed parameters with defaults
+- [x] **Execution** — CALL...YIELD, inline in expressions, body caching
+- [x] **Schema Functions** — Namespace-qualified functions, collection/graph access
+- [x] **Browser UI** — Create/edit/delete functions, test panel, call log
+
+### Phase 19: Triggers — Complete (39/39)
+
+- [x] **Trigger DDL** — CREATE/DROP/ENABLE/DISABLE TRIGGER, priority ordering
+- [x] **Event Types** — BEFORE/AFTER on INSERT/UPDATE/DELETE, label and collection targets
+- [x] **Trigger Body** — OLD/NEW variables, RAISE, SET, conditional logic
+- [x] **Execution** — Cascade detection (max 16 levels), sync rule interaction
+- [x] **Browser UI** — Create/edit triggers, activity log, dependency analysis
+
+### Phase 20: Observability — Complete (46/46)
+
+- [x] **Event Log** — Ring buffer with configurable retention, structured event types
+- [x] **Query Analytics** — p95/p99 latency, slow query detection, top-N queries
+- [x] **Dependency Analysis** — Trigger cascades, function calls, sync rule interactions
+- [x] **Alerts** — Configurable rules, error rate thresholds, built-in defaults
+- [x] **Browser UI** — Event log explorer, query stats, alerts panel
+
+### Phase 21: Data Import — In Progress (7/57)
+
+- [x] **Cypher Script Import** — CLI, REST API, browser UI, Neo4j-compatible format
+- [ ] **CSV Import** — Header mapping, type inference, batch loading
+- [ ] **JSON Import** — Nested document to graph mapping
+- [ ] **GraphML Import** — Standard graph interchange format
+- [ ] **Export** — Cypher dump, CSV, JSON, GraphML
+- [ ] **Example Datasets** — Movies, social network, recommendations
+- [ ] **Documentation** — Import/export guides
+
+### Phase 22: Edge Functions — In Progress (6/64)
+
+- [x] **Function Runtime** — Deno/Node.js subprocess execution, HTTP triggers (partial)
+- [ ] **Deployment & Management** — Versioning, rollback, resource limits
+- [ ] **Database Access** — Graph/document queries from function context
+- [ ] **Environment Variables & Secrets** — Encrypted secret storage
+- [ ] **Local Development** — Hot reload, debug logging, test harness
+- [ ] **Browser UI** — Function editor, logs, deployment status
+- [ ] **Documentation** — Guides and API reference
+
+### Phase 23: Hooks — Planned (0/44)
+
+- [ ] **Hook Definition** — CREATE/DROP/ENABLE/DISABLE HOOK DDL
+- [ ] **System Events** — ON SERVER START/SHUTDOWN, ON CONNECT/DISCONNECT, ON SCHEMA CHANGE, ON BACKUP
+- [ ] **Scheduled Hooks** — Cron expressions, interval-based, distributed lock for single execution
+- [ ] **Webhook Integration** — HTTP POST to external URLs, retry policy, signature verification
+- [ ] **Hook Body** — Cypher execution, variable access, error handling
+- [ ] **Browser UI** — Hook management, execution history
+- [ ] **Documentation** — Overview, reference, tutorials
+
+### Phase 24: Bolt Protocol — Planned (0/76)
+
+- [ ] **PackStream Serialization** — Binary encode/decode for all Cypher types (nodes, rels, paths, scalars)
+- [ ] **Chunked Transport** — u16 length-prefixed chunks over TCP, async with Tokio
+- [ ] **Bolt Handshake** — Magic preamble, version negotiation (Bolt v4.4/v5.0)
+- [ ] **Authentication** — HELLO/LOGON messages, credential validation against auth.users
+- [ ] **Query Execution** — RUN/PULL/DISCARD messages, streaming records
+- [ ] **Transactions** — BEGIN/COMMIT/ROLLBACK, auto-commit mode, state machine
+- [ ] **Error Handling** — Neo4j-compatible error codes, FAILURE/RESET messages
+- [ ] **Server Integration** — TCP listener alongside HTTP, shared AppState, graceful shutdown
+- [ ] **Routing** — ROUTE message for standalone mode, multi-database via routing context
+- [ ] **Driver Compatibility** — Test with official Neo4j drivers (Python, JS, Java, Go)
+- [ ] **Performance** — Bolt vs HTTP benchmarks, zero-copy encoding, backpressure
+- [ ] **TLS Support** — Optional bolt+s://, certificate configuration
+- [ ] **Documentation** — Protocol overview, driver connection guides, compatibility matrix
+
 ## License
 
 Copyright (c) 2026 Devforge Pty Ltd. All rights reserved.
